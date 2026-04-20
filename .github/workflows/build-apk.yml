@@ -1,0 +1,62 @@
+name: Build Express Phone Pro APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: ⬇️ Checkout code
+      uses: actions/checkout@v4
+      env:
+        ACTIONS_ALLOW_UNSECURE_NODE_VERSION: true
+
+    - name: ☕ Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+      env:
+        ACTIONS_ALLOW_UNSECURE_NODE_VERSION: true
+
+    - name: 🔧 Fix Gradle Wrapper
+      run: |
+        # Use Gradle 8.9 (stable, available)
+        GRADLE_VERSION=8.9
+        wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
+          -O gradle-bin.zip
+        unzip -q gradle-bin.zip -d /opt/gradle
+        export PATH=$PATH:/opt/gradle/gradle-${GRADLE_VERSION}/bin
+        echo "/opt/gradle/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
+
+        # Update wrapper properties to match
+        sed -i "s|distributionUrl=.*|distributionUrl=https\\\\://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip|" \
+          gradle/wrapper/gradle-wrapper.properties
+
+        # Regenerate wrapper jar
+        gradle wrapper --gradle-version=${GRADLE_VERSION} --distribution-type=bin
+        chmod +x gradlew
+        ls -lh gradle/wrapper/gradle-wrapper.jar
+        echo "✅ Gradle ${GRADLE_VERSION} wrapper ready"
+
+    - name: 🔨 Build Debug APK
+      run: ./gradlew assembleDebug --no-daemon
+      env:
+        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        ANDROID_HOME: /usr/local/lib/android/sdk
+
+    - name: 📦 Upload APK
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: ExpressPhonePro-APK
+        path: app/build/outputs/apk/debug/*.apk
+        retention-days: 30
+
+    - name: 🎉 Done
+      if: success()
+      run: find app/build/outputs/apk -name "*.apk" -exec ls -lh {} \;
